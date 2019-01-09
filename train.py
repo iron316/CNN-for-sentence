@@ -33,40 +33,41 @@ class CNN_fsc(chainer.Chain):
         super(CNN_fsc, self).__init__()
         with self.init_scope():
             self.cnn_w3 = L.Convolution2D(
-                None, 100, ksize=(100, 3), pad=(2, 0))
+                None, 100, ksize=(3, 200), pad=0)
             self.cnn_w4 = L.Convolution2D(
-                None, 100, ksize=(100, 3), pad=(3, 0))
+                None, 100, ksize=(4, 200), pad=0)
             self.cnn_w5 = L.Convolution2D(
-                None, 100, ksize=(100, 4), pad=(4, 0))
+                None, 100, ksize=(5, 200), pad=0)
             self.fc = L.Linear(None, 2)
 
     def __call__(self, x):
         sentence_vec = x.reshape((-1, 1, 100, 200))
-        h_3 = F.max_pooling_2d(F.tanh(self.cnn_w3(sentence_vec)), 350)
-        h_4 = F.max_pooling_2d(F.tanh(self.cnn_w4(sentence_vec)), 350)
-        h_5 = F.max_pooling_2d(F.tanh(self.cnn_w5(sentence_vec)), 350)
+        h_3 = F.max_pooling_2d(F.tanh(self.cnn_w3(sentence_vec)), 100)
+        h_4 = F.max_pooling_2d(F.tanh(self.cnn_w4(sentence_vec)), 100)
+        h_5 = F.max_pooling_2d(F.tanh(self.cnn_w5(sentence_vec)), 100)
         concat = F.concat([h_3, h_4, h_5], axis=2)
-        h2 = F.relu(concat)
-        y = F.dropout(self.fc(h2), ratio=0.5)
+        h2 = F.dropout(F.relu(concat), ratio=0.5)
+        y = self.fc(h2)
         return y
 
 
-def __main__():
+def main():
     reset_seed(0)
     #dirs = ['natsume', 'edogawa']
     #data = create_dataset(dirs)
     #test, train_val = split_dataset_random(data, 10, seed=19910927)
     with open('sentence_vec.pickle', 'rb') as rbf:
-        data = pickle.load(rbf)
-    
-    train, valid = split_dataset_random(data, int(len(data) * 0.8), seed=19910927)
+        train = pickle.load(rbf)
+    with open('test_sentence_vec.pickle', 'rb') as rbf:
+        valid = pickle.load(rbf)
+    #train, valid = split_dataset_random(data, int(len(data) * 0.8), seed=19910927)
     
     batch_size = 256
     gpu_id = 0
-    max_epoch = 100
+    max_epoch = 200
 
     train_iter = iterators.SerialIterator(train, batch_size)
-   valid_iter = iterators.SerialIterator(
+    valid_iter = iterators.SerialIterator(
         valid, batch_size, repeat=False, shuffle=False)
     #test_iter = iterators.SerialIterator(
     #    test, batch_size, repeat=False, shuffle=False)
@@ -87,8 +88,8 @@ def __main__():
     trainer.extend(training.extensions.Evaluator(
         valid_iter, model, device=gpu_id))
     trainer.extend(training.extensions.PrintReport(
-        ['epoch', 'main/loss', 'main/accuracy',
-         'validation/main/loss', 'validation/main/accuracy', 'elapsed_time']))
+        ['epoch', 'main/loss',  'validation/main/loss',
+            'main/accuracy','validation/main/accuracy', 'elapsed_time']))
     trainer.extend(training.extensions.ProgressBar(update_interval=10))
     trainer.extend(training.extensions.PlotReport(
         ['main/loss', 'validation/main/loss'], x_key='epoch', file_name='loss.png'))

@@ -15,12 +15,19 @@ def create_dataset(dirs):
         datasets.extend([(token, label) for token in tokens])
     return datasets
 
-def __main__():
-    dirs = ['natsume','edogawa']
-    data = create_dataset(dirs)
-    print(len(data))
-    #with open('sentence_vec.pickle', 'wb') as wbf:
-    #    pickle.dump(data, wbf)
+def main():
+    train_dirs = ['natsume','edogawa']
+    test_dirs = ['test_natsume','test_edogawa']
+
+    train_data = create_dataset(train_dirs)
+    test_data = create_dataset(test_dirs)
+    print("train  : {}".format(len(train_data)))
+    print("test   : {}".format(len(test_data)))
+    with open('sentence_vec.pickle', 'wb') as wbf:
+        pickle.dump(train_data, wbf)
+    with open('test_sentence_vec.pickle','wb') as wbf:
+        pickle.dump(test_data,wbf)
+
 
 if __name__ == '__main__':
-    __main__()
+    main()
