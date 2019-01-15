@@ -1,9 +1,6 @@
 
 # coding: utf-8
 
-# In[1]:
-
-
 from gensim.models import KeyedVectors
 import zipfile
 import re
@@ -39,21 +36,34 @@ def trans_wakati(lines):
 
 
 def trans_array(wakati, model):
-    sentences = [[model[word]
-                  for word in words if word in model.vocab]for words in wakati]
-    sentence_vec = []
-    for sentence in sentences:
-        pad_sentence = np.zeros((100, 200))
-        sentence = np.asarray(sentence).reshape((-1, 200))
-        if 10 < sentence.shape[0] < 100:
-            pad_sentence[:len(sentence)] = sentence
-            sentence_vec.append(pad_sentence.astype(np.float32))
-        else:
-            continue
+    sentence = [model[word] if word in model.vocab else np.random.normal(size=(200))
+                for word in wakati]
+    if len(sentence) > 250:
+        sentence = sentence[:250]
+    sentence_vec = np.asarray(sentence).reshape(-1, 200)
     return sentence_vec
 
 
-def trans_vector(files, model):
+def to_idx(wakati, dct):
+    idx_list = [dct.doc2idx(sentence, unknown_word_index=-2)
+                for sentence in wakati]
+    return idx_list
+
+
+def split_sentence(files, dct):
+    dir_sentence = []
+    for file_name in files:
+        with open(file_name, "rb") as rbf:
+            bindata = rbf.read()
+            text = bindata.decode('shift_jis')
+            lines = text_split(text)
+            wakati = trans_wakati(lines)
+            idx = to_idx(wakati, dct)
+        dir_sentence.extend(idx)
+    return dir_sentence
+
+
+def trans_vector(files, dct):
     dir_vectors = []
     for file_name in files:
         with open(file_name, "rb") as rf:
@@ -62,5 +72,7 @@ def trans_vector(files, model):
             lines = text_split(text)
             wakati = trans_wakati(lines)
             sentence_vec = trans_array(wakati, model)
+            print(file_name)
+        print("{} vector : {}".format(file_name, len(sentence_vec)))
         dir_vectors.extend(sentence_vec)
     return dir_vectors
