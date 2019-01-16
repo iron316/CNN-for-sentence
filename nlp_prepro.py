@@ -59,7 +59,6 @@ def split_sentence(files, dct, n_vocab):
             lines = text_split(text)
             wakati = trans_wakati(lines)
             idx = to_idx(wakati, dct, n_vocab)
-        print(file_name+str(len(idx)))
         dir_sentence.extend(idx)
     return dir_sentence
 

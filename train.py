@@ -4,7 +4,7 @@ import chainer.functions as F
 import chainer.links as L
 from chainer.dataset import concat_examples
 from chainer import iterators, training, optimizers
-from net import non_static, static
+from net import non_static, static, text_classifier
 import numpy as np
 import random
 import matplotlib.pyplot as plt
@@ -46,7 +46,7 @@ def convert_seq(batch, device=None, with_label=True):
             xp = chainer.cuda.cupy.get_array_module(*batch)
             concat = xp.concatenate(batch, axis=0)
             sections = np.cumsum([len(x)
-                                     for x in batch[:-1]], dtype=np.int32)
+                                  for x in batch[:-1]], dtype=np.int32)
             concat_dev = chainer.dataset.to_device(device, concat)
             batch_dev = chainer.cuda.cupy.split(concat_dev, sections)
             return batch_dev
@@ -115,7 +115,7 @@ def main():
     # with open('test_sentence_vec.pickle', 'rb') as rbf:
     #    valid = pickle.load(rbf)
     #train, valid = split_dataset_random(data, int(len(data) * 0.8), seed=19910927)
-    batch_size = 64
+    batch_size = 2
     gpu_id = 0
     max_epoch = 100
     #train = Preprocessdataset(train)
@@ -128,13 +128,12 @@ def main():
     # test_iter = iterators.SerialIterator(
     #    test, batch_size, repeat=False, shuffle=False)
 
-    net = static(w2v_w)
+    encoder = static(w2v_w, batch_size)
 
-    model = L.Classifier(net)
+    model = text_classifier(encoder)
 
     if gpu_id >= 0:
         model.to_gpu(gpu_id)
-    import pdb; pdb.set_trace()
     optimizer = optimizers.Adam().setup(model)
 
     updater = training.StandardUpdater(
