@@ -44,13 +44,13 @@ def trans_array(wakati, model):
     return sentence_vec
 
 
-def to_idx(wakati, dct):
-    idx_list = [dct.doc2idx(sentence, unknown_word_index=-2)
+def to_idx(wakati, dct, n_vocab):
+    idx_list = [np.array(dct.doc2idx(sentence, unknown_word_index=n_vocab), dtype=np.int32)
                 for sentence in wakati]
     return idx_list
 
 
-def split_sentence(files, dct):
+def split_sentence(files, dct, n_vocab):
     dir_sentence = []
     for file_name in files:
         with open(file_name, "rb") as rbf:
@@ -58,7 +58,8 @@ def split_sentence(files, dct):
             text = bindata.decode('shift_jis')
             lines = text_split(text)
             wakati = trans_wakati(lines)
-            idx = to_idx(wakati, dct)
+            idx = to_idx(wakati, dct, n_vocab)
+        print(file_name+str(len(idx)))
         dir_sentence.extend(idx)
     return dir_sentence
 

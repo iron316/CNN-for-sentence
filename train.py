@@ -4,7 +4,7 @@ import chainer.functions as F
 import chainer.links as L
 from chainer.dataset import concat_examples
 from chainer import iterators, training, optimizers
-from net import non_static
+from net import non_static, static
 import numpy as np
 import random
 import matplotlib.pyplot as plt
@@ -23,9 +23,7 @@ def reset_seed(seed=0):
 def get_w(model):
     w = model.vectors
     unk_vec = np.random.normal(size=(200)).astype(np.float32)
-    zero_vec = np.zeros((200), dtype=np.float32)
     w2v_w = np.vstack((w, unk_vec))
-    w2v_w = np.vstack((w2v_w, zero_vec))
     return w2v_w
 
 
@@ -36,6 +34,28 @@ def show_test_performance(model, test_iter, gpu_id, batch_size):
         test_iter, model, device=gpu_id)
     results = test_evaluator()
     print('Test accuracy:', results['main/accuracy'])
+
+
+def convert_seq(batch, device=None, with_label=True):
+    def to_device_batch(batch):
+        if device is None:
+            return batch
+        elif device < 0:
+            return [chainer.dataset.to_device(device, x) for x in batch]
+        else:
+            xp = chainer.cuda.cupy.get_array_module(*batch)
+            concat = xp.concatenate(batch, axis=0)
+            sections = np.cumsum([len(x)
+                                     for x in batch[:-1]], dtype=np.int32)
+            concat_dev = chainer.dataset.to_device(device, concat)
+            batch_dev = chainer.cuda.cupy.split(concat_dev, sections)
+            return batch_dev
+
+    if with_label:
+        return {'xs': to_device_batch([x for x, _ in batch]),
+                'ys': to_device_batch([y for _, y in batch])}
+    else:
+        return to_device_batch([x for x in batch])
 
 
 class CNN_fsc(chainer.Chain):
@@ -72,10 +92,11 @@ class Preprocessdataset(chainer.dataset.DatasetMixin):
 
     def get_example(self, i):
         idx_list, label = self. values[i]
-        pad = [-1]*100
-        if len(idx_list) >= 100:
-            idx_list = idx_list[:100]
-        pad[:len(idx_list)] = idx_list
+        #pad = [-1]*200
+        # if len(idx_list) >= 200:
+        #    idx_list = idx_list[:200]
+        #pad[:len(idx_list)] = idx_list
+        pad = idx_list
         return np.array(pad, dtype=np.int32), label
 
 
@@ -83,7 +104,7 @@ def main():
     reset_seed(0)
     model_dir = "entity_vector.model.bin"
     w2v_model = KeyedVectors.load_word2vec_format(model_dir, binary=True)
-    train_dirs = ['natsume', 'edogawa' 'dazai', 'akutagawa', 'miyazawa']
+    train_dirs = ['natsume', 'edogawa', 'dazai', 'akutagawa', 'miyazawa']
     test_dirs = ['test_natsume', 'test_edogawa',
                  'test_dazai', 'test_akutagawa', 'test_miyazawa']
     train = create_dataset(train_dirs, w2v_model)
@@ -94,13 +115,11 @@ def main():
     # with open('test_sentence_vec.pickle', 'rb') as rbf:
     #    valid = pickle.load(rbf)
     #train, valid = split_dataset_random(data, int(len(data) * 0.8), seed=19910927)
-
-    batch_size = 128
+    batch_size = 64
     gpu_id = 0
     max_epoch = 100
-    train = Preprocessdataset(train)
-    valid = Preprocessdataset(valid)
-
+    #train = Preprocessdataset(train)
+    # 1valid = Preprocessdataset(valid)
     w2v_w = get_w(w2v_model)
 
     train_iter = iterators.MultithreadIterator(train, batch_size, n_threads=4)
@@ -109,21 +128,22 @@ def main():
     # test_iter = iterators.SerialIterator(
     #    test, batch_size, repeat=False, shuffle=False)
 
-    net = non_static(w2v_w)
+    net = static(w2v_w)
 
     model = L.Classifier(net)
 
     if gpu_id >= 0:
         model.to_gpu(gpu_id)
-
+    import pdb; pdb.set_trace()
     optimizer = optimizers.Adam().setup(model)
 
-    updater = training.StandardUpdater(train_iter, optimizer, device=gpu_id)
+    updater = training.StandardUpdater(
+        train_iter, optimizer, converter=convert_seq, device=gpu_id)
     trainer = training.Trainer(updater, (max_epoch, 'epoch'), out="result")
 
     trainer.extend(training.extensions.LogReport())
     trainer.extend(training.extensions.Evaluator(
-        valid_iter, model, device=gpu_id))
+        valid_iter, model, converter=convert_seq, device=gpu_id))
     trainer.extend(training.extensions.PrintReport(
         ['epoch', 'main/loss',  'validation/main/loss',
             'main/accuracy', 'validation/main/accuracy', 'elapsed_time']))
