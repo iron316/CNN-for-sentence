@@ -1,15 +1,14 @@
 from datasets import create_dataset
 import chainer
-import chainer.functions as F
-import chainer.links as L
-from chainer.dataset import concat_examples
 from chainer import iterators, training, optimizers
-from net import non_static, static, text_classifier
+import nets
 import numpy as np
 import random
 import matplotlib.pyplot as plt
 from sklearn.metrics import confusion_matrix
 from gensim.models import KeyedVectors
+import argparse
+import json
 plt.switch_backend('agg')
 
 
@@ -25,15 +24,6 @@ def get_w(model):
     unk_vec = np.random.normal(size=(200)).astype(np.float32)
     w2v_w = np.vstack((w, unk_vec))
     return w2v_w
-
-
-def show_test_performance(model, test_iter, gpu_id, batch_size):
-    if gpu_id >= 0:
-        model.to_gpu()
-    test_evaluator = training.extensions.Evaluator(
-        test_iter, model, device=gpu_id)
-    results = test_evaluator()
-    print('Test accuracy:', results['main/accuracy'])
 
 
 def convert_seq(batch, device=None, with_label=True):
@@ -58,49 +48,36 @@ def convert_seq(batch, device=None, with_label=True):
         return to_device_batch([x for x in batch])
 
 
-class CNN_fsc(chainer.Chain):
-    def __init__(self):
-        super(CNN_fsc, self).__init__()
-        with self.init_scope():
-            self.cnn_w3 = L.Convolution2D(
-                None, 100, ksize=(3, 200), pad=0)
-            self.cnn_w4 = L.Convolution2D(
-                None, 100, ksize=(4, 200), pad=0)
-            self.cnn_w5 = L.Convolution2D(
-                None, 100, ksize=(5, 200), pad=0)
-            self.fc = L.Linear(None, 5)
-
-    def __call__(self, x):
-        h = x.reshape((-1, 1, 250, 200))
-        wc_sentence = F.dropout(h, ratio=0.2)
-        h_3 = F.max_pooling_2d(F.tanh(self.cnn_w3(wc_sentence)), 250)
-        h_4 = F.max_pooling_2d(F.tanh(self.cnn_w4(wc_sentence)), 250)
-        h_5 = F.max_pooling_2d(F.tanh(self.cnn_w5(wc_sentence)), 250)
-        concat = F.concat([h_3, h_4, h_5], axis=2)
-        h2 = F.dropout(F.relu(concat), ratio=0.5)
-        y = self.fc(h2)
-        return y
-
-
-class Preprocessdataset(chainer.dataset.DatasetMixin):
-
-    def __init__(self, values):
+class preprocess(chainer.dataset.DatasetMixin):
+    def __init__(self, values, ratio):
         self.values = values
+        self.ratio = ratio
 
     def __len__(self):
         return len(self.values)
 
     def get_example(self, i):
-        idx_list, label = self. values[i]
-        #pad = [-1]*200
-        # if len(idx_list) >= 200:
-        #    idx_list = idx_list[:200]
-        #pad[:len(idx_list)] = idx_list
-        pad = idx_list
-        return np.array(pad, dtype=np.int32), label
+        value, label = self.values[i]
+        drop_value = [X if np.random.random() > self.ratio else -1 for X in value]
+        return (np.array(drop_value, dtype=np.int32), label)
+
 
 
 def main():
+    parser = argparse.ArgumentParser(
+        description='CNN for sentence classifier')
+    parser.add_argument('--batchsize', '-b', type=int, default=128,
+                        help='Number of images in each mini-batch')
+    parser.add_argument('--epoch', '-e', type=int, default=30,
+                        help='Number of sweeps over the dataset to train')
+    parser.add_argument('--gpu', '-g', type=int, default=-1,
+                        help='GPU ID (negative value indicates CPU)')
+    parser.add_argument('--model', '-model', default='Two_channel',
+                        choices=['Non_static', 'Static', 'Two_channel'],
+                        help='Name of encoder model type.')
+    args = parser.parse_args()
+    print(json.dumps(args.__dict__, indent=2))
+
     reset_seed(0)
     model_dir = "entity_vector.model.bin"
     w2v_model = KeyedVectors.load_word2vec_format(model_dir, binary=True)
@@ -109,28 +86,26 @@ def main():
                  'test_dazai', 'test_akutagawa', 'test_miyazawa']
     train = create_dataset(train_dirs, w2v_model)
     valid = create_dataset(test_dirs, w2v_model)
-    #test, train_val = split_dataset_random(data, 10, seed=19910927)
-    # with open('sentence_vec.pickle', 'rb') as rbf:
-    #    train = pickle.load(rbf)
-    # with open('test_sentence_vec.pickle', 'rb') as rbf:
-    #    valid = pickle.load(rbf)
-    #train, valid = split_dataset_random(data, int(len(data) * 0.8), seed=19910927)
-    batch_size = 2
-    gpu_id = 0
-    max_epoch = 100
-    #train = Preprocessdataset(train)
-    # 1valid = Preprocessdataset(valid)
+    train = preprocess(train, ratio=0.2)
+
+    batch_size = args.batchsize
+    gpu_id = args.gpu
+    max_epoch = args.epoch
+
     w2v_w = get_w(w2v_model)
 
     train_iter = iterators.MultithreadIterator(train, batch_size, n_threads=4)
     valid_iter = iterators.MultithreadIterator(
         valid, batch_size, n_threads=4, repeat=False, shuffle=False)
-    # test_iter = iterators.SerialIterator(
-    #    test, batch_size, repeat=False, shuffle=False)
+    if args.model == 'Non_static':
+        Encoder = nets.Non_static
+    elif args.model == 'Static':
+        Encoder = nets.Static
+    elif args.model == 'Two_channel':
+        Encoder = nets.Two_channel
+    encoder = Encoder(w2v_w, batch_size)
 
-    encoder = static(w2v_w, batch_size)
-
-    model = text_classifier(encoder)
+    model = nets.Text_classifier(encoder)
 
     if gpu_id >= 0:
         model.to_gpu(gpu_id)
@@ -158,18 +133,20 @@ def main():
     chainer.serializers.save_npz("mymodel.npz", model)
     test_iter = iterators.SerialIterator(
         valid, batch_size, repeat=False, shuffle=False)
-    #show_test_performance(model, test_iter, gpu_id,batch_size)
 
     result = {'y_pred': [],
               'y_true': []}
     for batch in test_iter:
-        X_test, y_test = concat_examples(batch, gpu_id)
+        #X_test, y_test = concat_examples(batch, gpu_id)
+        test = convert_seq(batch, gpu_id)
+        X_test = test['xs']
+        y_test = [int(y[0]) for y in test['ys']]
         with chainer.no_backprop_mode(), chainer.using_config("train", False):
-            y_pred_batch = model.predictor(X_test)
+            y_pred_batch = model.predict(X_test)
         if gpu_id >= 0:
             y_pred_batch = chainer.cuda.to_cpu(y_pred_batch.data)
         result['y_pred'].extend(np.argmax(y_pred_batch, axis=1).tolist())
-        result['y_true'].extend(y_test.tolist())
+        result['y_true'].extend(y_test)
     print(confusion_matrix(result['y_true'], result['y_pred']))
 
 
