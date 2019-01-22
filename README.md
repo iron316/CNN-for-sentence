@@ -5,6 +5,9 @@
 青空文庫
 - natsume
 - edogawa
+- dazai
+- akutagawa
+- miyazawa
 
 writer classification
 
