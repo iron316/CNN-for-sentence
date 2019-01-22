@@ -5,9 +5,9 @@ from chainer.dataset.convert import concat_examples
 from chainer import reporter
 
 
-class Text_classifier(chainer.Chain):
+class TextClassifier(chainer.Chain):
     def __init__(self, encoder):
-        super(Text_classifier, self).__init__()
+        super(TextClassifier, self).__init__()
         with self.init_scope():
             self.encoder = encoder
 
@@ -25,14 +25,16 @@ class Text_classifier(chainer.Chain):
         out_put = self.encoder(xs)
         return out_put
 
-class Non_static(chainer.Chain):
+
+class NonStatic(chainer.Chain):
     def __init__(self, w2v_w, batch_size):
         self.w2v_w = w2v_w
         self.batch = batch_size
-        super(Non_static, self).__init__()
+        super(NonStatic, self).__init__()
         with self.init_scope():
             self.embed = L.EmbedID(
-                self.w2v_w.shape[0], self.w2v_w.shape[1], ignore_label=-1, initialW=self.w2v_w)
+                self.w2v_w.shape[0], self.w2v_w.shape[1],
+                ignore_label=-1, initialW=self.w2v_w)
             self.cnn_w3 = L.Convolution2D(None, 100, (3, 200))
             self.cnn_w4 = L.Convolution2D(None, 100, (4, 200))
             self.cnn_w5 = L.Convolution2D(None, 100, (5, 200))
@@ -62,7 +64,8 @@ class Static(chainer.Chain):
         super(Static, self).__init__()
         with self.init_scope():
             self.embed = L.EmbedID(
-                self.w2v_w.shape[0], self.w2v_w.shape[1], ignore_label=-1, initialW=self.w2v_w)
+                self.w2v_w.shape[0], self.w2v_w.shape[1],
+                ignore_label=-1, initialW=self.w2v_w)
             self.embed.disable_update()
             self.cnn_w3 = L.Convolution2D(None, 100, (3, 200))
             self.cnn_w4 = L.Convolution2D(None, 100, (4, 200))
@@ -86,17 +89,19 @@ class Static(chainer.Chain):
         return y
 
 
-class Two_channel(chainer.Chain):
+class TwoChannel(chainer.Chain):
     def __init__(self, w2v_w, batch_size):
         self.w2v_w = w2v_w
         self.batch = batch_size
-        super(Two_channel, self).__init__()
+        super(TwoChannel, self).__init__()
         with self.init_scope():
             self.embed1 = L.EmbedID(
-                self.w2v_w.shape[0], self.w2v_w.shape[1], ignore_label=-1, initialW=self.w2v_w)
+                self.w2v_w.shape[0], self.w2v_w.shape[1],
+                ignore_label=-1, initialW=self.w2v_w)
             self.embed1.disable_update()
             self.embed2 = L.EmbedID(
-                self.w2v_w.shape[0], self.w2v_w.shape[1], ignore_label=-1, initialW=self.w2v_w)
+                self.w2v_w.shape[0], self.w2v_w.shape[1],
+                ignore_label=-1, initialW=self.w2v_w)
             self.cnn_w3 = L.Convolution2D(None, 100, (3, 200))
             self.cnn_w4 = L.Convolution2D(None, 100, (4, 200))
             self.cnn_w5 = L.Convolution2D(None, 100, (5, 200))

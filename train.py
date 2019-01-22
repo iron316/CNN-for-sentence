@@ -48,7 +48,7 @@ def convert_seq(batch, device=None, with_label=True):
         return to_device_batch([x for x in batch])
 
 
-class preprocess(chainer.dataset.DatasetMixin):
+class Preprocess(chainer.dataset.DatasetMixin):
     def __init__(self, values, ratio):
         self.values = values
         self.ratio = ratio
@@ -62,7 +62,6 @@ class preprocess(chainer.dataset.DatasetMixin):
         return (np.array(drop_value, dtype=np.int32), label)
 
 
-
 def main():
     parser = argparse.ArgumentParser(
         description='CNN for sentence classifier')
@@ -72,8 +71,8 @@ def main():
                         help='Number of sweeps over the dataset to train')
     parser.add_argument('--gpu', '-g', type=int, default=-1,
                         help='GPU ID (negative value indicates CPU)')
-    parser.add_argument('--model', '-model', default='Two_channel',
-                        choices=['Non_static', 'Static', 'Two_channel'],
+    parser.add_argument('--model', '-model', default='TwoChannel',
+                        choices=['NonStatic', 'Static', 'TwoChannel'],
                         help='Name of encoder model type.')
     args = parser.parse_args()
     print(json.dumps(args.__dict__, indent=2))
@@ -86,7 +85,7 @@ def main():
                  'test_dazai', 'test_akutagawa', 'test_miyazawa']
     train = create_dataset(train_dirs, w2v_model)
     valid = create_dataset(test_dirs, w2v_model)
-    train = preprocess(train, ratio=0.2)
+    train = Preprocess(train, ratio=0.2)
 
     batch_size = args.batchsize
     gpu_id = args.gpu
@@ -105,7 +104,7 @@ def main():
         Encoder = nets.Two_channel
     encoder = Encoder(w2v_w, batch_size)
 
-    model = nets.Text_classifier(encoder)
+    model = nets.TextClassifier(encoder)
 
     if gpu_id >= 0:
         model.to_gpu(gpu_id)
@@ -137,7 +136,6 @@ def main():
     result = {'y_pred': [],
               'y_true': []}
     for batch in test_iter:
-        #X_test, y_test = concat_examples(batch, gpu_id)
         test = convert_seq(batch, gpu_id)
         X_test = test['xs']
         y_test = [int(y[0]) for y in test['ys']]
